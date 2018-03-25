@@ -12,31 +12,54 @@ with (
         'Dist::Zilla::Role::FileGatherer',
 );
 
-has name => (is => 'rw', required => 1);
-has dest => (is => 'rw', required => 1);
+has regexp_pattern_module => (is => 'rw', required => 1);
+has regexp_common_module => (is => 'rw', required => 1);
+has category => (is => 'rw', required => 1);
 
 use namespace::autoclean;
 
 sub gather_files {
-    require Dist::Zilla::File::OnDisk;
+    require Dist::Zilla::File::InMemory;
     require Module::Path::More;
 
     my ($self, $arg) = @_;
 
-    $self->log_fatal("Please specify name") unless $self->name;
-    $self->log_fatal("Please specify dest") unless $self->dest;
+    my $rp_mod = $self->regexp_pattern_module;
+    $self->log_fatal("Please specify regexp_pattern_module") unless $rp_mod;
+    $rp_mod = "Regexp::Pattern::$rp_mod" unless $rp_mod =~ /\ARegexp::Pattern::/;
 
-    my $modpath = Module::Path::More::module_path(module => $self->name)
-        or $self->log_fatal(["Module %s not found on filesystem", $self->name]);
+    my $rc_mod = $self->regexp_common_module;
+    $self->log_fatal("Please specify regexp_common_module") unless $rc_mod;
+    $rc_mod = "Regexp::Common::$rc_mod" unless $rc_mod =~ /\ARegexp::Common::/;
 
-    my $fileobj = Dist::Zilla::File::OnDisk->new({
-        name => $modpath,
+    $self->log_fatal("Please specify category") unless $self->category;
+
+    my @content;
+    push @content, "package $rc_mod;\n";
+    push @content, "\n";
+    push @content, "# DATE\n";
+    push @content, "# VERSION\n";
+    push @content, "\n";
+    push @content, "use strict;\n";
+    push @content, "use warnings;\n";
+    push @content, "\n";
+    push @content, "use Regexp::Common 'pattern';\n";
+    push @content, "\n";
+
+    # TODO
+
+    my $mod = $self->regexp_common_module;
+    (my $mod_path = "lib/$mod.pm") =~ s!::!/!g;
+
+    my $fileobj = Dist::Zilla::File::InMemory->new({
+        name => $mod_path,
         mode => 0644,
+        content => join("", @content),
     });
     $fileobj->name($self->dest);
 
-    $self->log(["Adding module %s (from %s) to %s",
-                $self->name, $modpath, $self->dest]);
+    $self->log(["Adding module %s at %s ...",
+                $self->regexp_common_module, $mod_path]);
     $self->add_file($fileobj);
 }
 
@@ -50,7 +73,7 @@ __PACKAGE__->meta->make_immutable;
 
 In F<dist.ini>:
 
- [AddModule::FromFS]
+ [AddModule::RegexpCommon::FromRegexpPattern]
  name=Module::List
  dest=t/lib/Module/List.pm
 
